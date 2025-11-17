@@ -1,5 +1,5 @@
 {
-  "name": "@principal-ade/industry-themed-code-city-panel",
+  "name": "@industry-theme/code-city-panel",
   "version": "0.1.0",
   "description": "Code City visualization panel extension for @principal-ade/panel-framework-core",
   "type": "module",
