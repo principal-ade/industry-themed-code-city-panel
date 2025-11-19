@@ -39,7 +39,7 @@
   "dependencies": {
     "@principal-ai/code-city-builder": "latest",
     "@principal-ai/code-city-react": "latest",
-    "@principal-ade/industry-theme": "^0.1.2",
+    "@principal-ade/industry-theme": "^0.1.3",
     "@principal-ade/panel-framework-core": "^0.1.2",
     "clsx": "^2.1.1",
     "lucide-react": "^0.552.0"
