@@ -176,6 +176,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   // Load city data from file tree
   useEffect(() => {
     if (!fileTreeSlice?.data || !fileTreeSlice.data.files) {
+      setLoading(false);
       return;
     }
 
@@ -219,7 +220,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [fileTreeSlice, context.currentScope.repository?.path]);
+  }, [fileTreeSlice?.data, fileTreeSlice?.loading, context.currentScope.repository?.path]);
 
   // Handle file click
   const handleFileClick = useCallback(
