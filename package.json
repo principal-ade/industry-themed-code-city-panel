@@ -1,6 +1,6 @@
 {
   "name": "@industry-theme/code-city-panel",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Code City visualization panel extension for @principal-ade/panel-framework-core",
   "type": "module",
   "main": "dist/panels.bundle.js",
