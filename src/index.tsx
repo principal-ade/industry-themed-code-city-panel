@@ -1,5 +1,6 @@
 import { CodeCityPanel } from './panels/CodeCityPanel';
 import type { PanelDefinition, PanelContextValue } from './types';
+import { codeCityPanelTools, codeCityPanelToolsMetadata } from './tools';
 
 /**
  * Export array of panel definitions.
@@ -16,6 +17,8 @@ export const panels: PanelDefinition[] = [
       description:
         '3D visualization of repository structure using the Code City metaphor',
       slices: ['fileTree'], // Data slices this panel depends on
+      // UTCP-compatible tools this panel exposes
+      tools: codeCityPanelTools,
     },
     component: CodeCityPanel,
 
@@ -58,3 +61,15 @@ export const onPackageUnload = async () => {
   // eslint-disable-next-line no-console
   console.log('Panel package unloading - Code City Panel Extension');
 };
+
+/**
+ * Export tools for server-safe imports.
+ * Use '@industry-theme/code-city-panel/tools' to import without React dependencies.
+ */
+export {
+  codeCityPanelTools,
+  codeCityPanelToolsMetadata,
+  focusBuildingTool,
+  selectDistrictTool,
+  resetViewTool,
+} from './tools';
