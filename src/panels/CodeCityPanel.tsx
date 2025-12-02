@@ -22,6 +22,7 @@ import {
   CodeCityBuilderWithGrid,
   buildFileSystemTreeFromFileInfoList,
 } from '@principal-ai/code-city-builder';
+import type { FileTree } from '@principal-ai/repository-abstraction';
 import type { PanelComponentProps } from '../types';
 
 interface HoverInfo {
@@ -56,10 +57,8 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   const [loading, setLoading] = useState(false);
 
   // Get file tree slice for generating city data
-  const fileTreeSlice = context.getSlice<{
-    root: string;
-    files: Array<{ path: string; size: number; lines: number }>;
-  }>('fileTree');
+  // Uses FileTree format from @principal-ai/repository-abstraction
+  const fileTreeSlice = context.getSlice<FileTree>('fileTree');
 
   // Track whether file color layers are currently registered
   const fileColorLayersRegistered = useRef(false);
@@ -175,17 +174,17 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
 
   // Load city data from file tree
   useEffect(() => {
-    if (!fileTreeSlice?.data || !fileTreeSlice.data.files) {
+    if (!fileTreeSlice?.data || !fileTreeSlice.data.allFiles) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      // Convert file tree data to FileInfo format
-      const fileInfoList = fileTreeSlice.data.files.map((file: { path: string; size?: number; lines?: number }) => {
+      // Convert FileTree.allFiles to FileInfo format for code-city-builder
+      const fileInfoList = fileTreeSlice.data.allFiles.map((file) => {
         const pathParts = file.path.split('/');
-        const fileName = pathParts[pathParts.length - 1];
+        const fileName = file.name || pathParts[pathParts.length - 1];
         const extension = fileName.includes('.') ? fileName.split('.').pop() || '' : '';
 
         return {
@@ -202,17 +201,15 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       // Build the file system tree
       const fileSystemTree = buildFileSystemTreeFromFileInfoList(
         fileInfoList,
-        'mock-sha'
+        fileTreeSlice.data.sha || 'unknown'
       );
 
       // Create a builder instance
       const builder = new CodeCityBuilderWithGrid();
 
-      // Build the city data
-      const data = builder.buildCityFromFileSystem(
-        fileSystemTree,
-        fileTreeSlice.data.root || context.currentScope.repository?.path || '/'
-      );
+      // Build the city data - use root.path from FileTree
+      const rootPath = fileTreeSlice.data.root?.path || context.currentScope.repository?.path || '/';
+      const data = builder.buildCityFromFileSystem(fileSystemTree, rootPath);
 
       setCityData(data);
     } catch (error) {
