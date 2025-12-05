@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThemeProvider } from '@principal-ade/industry-theme';
 import type {
   PanelContextValue,
   PanelActions,
@@ -290,7 +291,11 @@ export const MockPanelProvider: React.FC<MockPanelProviderProps> = ({
   const actions = createMockActions(actionsOverrides);
   const events = createMockEvents();
 
-  // Clone the child element and inject props
+  // Clone the child element and inject props, wrapped in ThemeProvider
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return React.cloneElement(children, { context, actions, events } as any);
+  return (
+    <ThemeProvider>
+      {React.cloneElement(children, { context, actions, events } as any)}
+    </ThemeProvider>
+  );
 };

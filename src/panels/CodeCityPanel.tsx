@@ -9,7 +9,7 @@ import {
   EyeOff,
   Building2,
 } from 'lucide-react';
-import { ThemeProvider, useTheme } from '@principal-ade/industry-theme';
+import { useTheme } from '@principal-ade/industry-theme';
 import {
   ArchitectureMapHighlightLayers,
   type CityData,
@@ -610,13 +610,11 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
  * - File and directory hierarchy as a city metaphor
  * - Interactive hover and click functionality
  * - Highlight layers for different file types
+ *
+ * Note: This component expects to be rendered within a ThemeProvider from the host.
  */
 export const CodeCityPanel: React.FC<PanelComponentProps> = (props) => {
-  return (
-    <ThemeProvider>
-      <CodeCityPanelContent {...props} />
-    </ThemeProvider>
-  );
+  return <CodeCityPanelContent {...props} />;
 };
 
 /**
