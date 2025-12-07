@@ -1,14 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   MapIcon,
-  HelpCircle,
-  File,
-  Folder,
-  Layers,
-  Eye,
-  EyeOff,
   Building2,
+  List,
 } from 'lucide-react';
+import { Legend, LegendFileType, LegendGitStatus } from './components/Legend';
 import { useTheme } from '@principal-ade/industry-theme';
 import {
   ArchitectureMapHighlightLayers,
@@ -24,6 +20,24 @@ import {
 } from '@principal-ai/code-city-builder';
 import type { FileTree } from '@principal-ai/repository-abstraction';
 import type { PanelComponentProps } from '../types';
+
+/**
+ * Git status data - categorized file paths
+ */
+export interface GitStatus {
+  staged: string[];
+  unstaged: string[];
+  untracked: string[];
+  deleted: string[];
+}
+
+/** Git status category colors */
+const GIT_STATUS_COLORS = {
+  staged: '#22c55e',    // Green
+  unstaged: '#f59e0b',  // Yellow/amber
+  untracked: '#6b7280', // Gray
+  deleted: '#ef4444',   // Red
+} as const;
 
 interface HoverInfo {
   hoveredDistrict: CityDistrict | null;
@@ -52,7 +66,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   const { theme } = useTheme();
   const [cityData, setCityData] = useState<CityData | null>(null);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
-  const [showLayersPanel, setShowLayersPanel] = useState(false);
+  const [showLegend, setShowLegend] = useState(true);
   const [highlightLayers, setHighlightLayers] = useState<HighlightLayer[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -60,8 +74,12 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   // Uses FileTree format from @principal-ai/repository-abstraction
   const fileTreeSlice = context.getSlice<FileTree>('fileTree');
 
+  // Get git status slice for highlighting changed files
+  const gitSlice = context.getSlice<GitStatus>('git');
+
   // Track whether file color layers are currently registered
   const fileColorLayersRegistered = useRef(false);
+  const gitLayersRegistered = useRef(false);
   const lastHasGitOrAgentLayers = useRef<boolean | null>(null);
 
   // Compute tree stats from cityData
@@ -117,6 +135,97 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     return layers;
   }, [cityData]);
 
+  // Generate git status layers from city data and git slice
+  const gitStatusLayers = useMemo((): HighlightLayer[] => {
+    if (!cityData || !cityData.buildings || !gitSlice?.data) {
+      return [];
+    }
+
+    const gitStatus = gitSlice.data;
+    const buildingsByPath = new Map(
+      cityData.buildings.map((b) => [b.path, b])
+    );
+
+    const createLayerItems = (paths: string[]): LayerItem[] => {
+      const items: LayerItem[] = [];
+      for (const path of paths) {
+        const building = buildingsByPath.get(path);
+        if (building) {
+          items.push({
+            path: building.path,
+            type: 'file' as const,
+            renderStrategy: 'fill',
+          });
+        }
+      }
+      return items;
+    };
+
+    const layers: HighlightLayer[] = [];
+
+    // Staged files (green)
+    if (gitStatus.staged.length > 0) {
+      const items = createLayerItems(gitStatus.staged);
+      if (items.length > 0) {
+        layers.push({
+          id: 'git-highlight-staged',
+          name: 'Staged',
+          enabled: true,
+          color: GIT_STATUS_COLORS.staged,
+          priority: 100,
+          items,
+        });
+      }
+    }
+
+    // Unstaged/modified files (yellow)
+    if (gitStatus.unstaged.length > 0) {
+      const items = createLayerItems(gitStatus.unstaged);
+      if (items.length > 0) {
+        layers.push({
+          id: 'git-highlight-unstaged',
+          name: 'Modified',
+          enabled: true,
+          color: GIT_STATUS_COLORS.unstaged,
+          priority: 90,
+          items,
+        });
+      }
+    }
+
+    // Untracked files (gray)
+    if (gitStatus.untracked.length > 0) {
+      const items = createLayerItems(gitStatus.untracked);
+      if (items.length > 0) {
+        layers.push({
+          id: 'git-highlight-untracked',
+          name: 'Untracked',
+          enabled: true,
+          color: GIT_STATUS_COLORS.untracked,
+          priority: 80,
+          items,
+        });
+      }
+    }
+
+    // Deleted files (red) - these may not have buildings, but include for completeness
+    if (gitStatus.deleted.length > 0) {
+      const items = createLayerItems(gitStatus.deleted);
+      if (items.length > 0) {
+        layers.push({
+          id: 'git-highlight-deleted',
+          name: 'Deleted',
+          enabled: true,
+          color: GIT_STATUS_COLORS.deleted,
+          priority: 110,
+          items,
+        });
+      }
+    }
+
+    return layers;
+  }, [cityData, gitSlice?.data]);
+
   // Compute whether git/agent layers exist
   const hasGitOrAgentLayers = useMemo(() => {
     return highlightLayers.some(
@@ -124,17 +233,92 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         (layer.id.includes('git-highlight') ||
           layer.id.includes('agent') ||
           layer.id.includes('event-highlight')) &&
-        !layer.id.includes('file-color')
+        !layer.id.startsWith('ext-')
     );
   }, [highlightLayers]);
 
-  // Toggle layer enabled state
-  const setLayerEnabled = useCallback((layerId: string, enabled: boolean) => {
-    setHighlightLayers((prev) =>
-      prev.map((layer) =>
-        layer.id === layerId ? { ...layer, enabled } : layer
-      )
+  // Compute legend file types by grouping primary/secondary layers
+  const legendFileTypes = useMemo((): LegendFileType[] => {
+    // Group layers by extension (ext-ts-primary, ext-ts-secondary -> ts)
+    const groupedByExt = new Map<string, { primary?: typeof highlightLayers[0]; secondary?: typeof highlightLayers[0] }>();
+
+    highlightLayers.forEach((layer) => {
+      // Match ext-{name}-primary or ext-{name}-secondary
+      const match = layer.id.match(/^ext-(\w+)-(primary|secondary)$/);
+      if (match) {
+        const [, ext, type] = match;
+        if (!groupedByExt.has(ext)) {
+          groupedByExt.set(ext, {});
+        }
+        const group = groupedByExt.get(ext)!;
+        if (type === 'primary') {
+          group.primary = layer;
+        } else {
+          group.secondary = layer;
+        }
+      }
+    });
+
+    // Convert to LegendFileType array
+    const fileTypes: LegendFileType[] = [];
+    groupedByExt.forEach((group, ext) => {
+      if (group.primary) {
+        fileTypes.push({
+          id: ext,
+          name: group.primary.name,
+          fillColor: group.primary.color,
+          borderColor: group.secondary?.color,
+          count: group.primary.items.length,
+          enabled: group.primary.enabled,
+        });
+      }
+    });
+
+    // Sort by count (most files first)
+    return fileTypes.sort((a, b) => b.count - a.count);
+  }, [highlightLayers]);
+
+  // Compute legend git status items from highlight layers
+  const legendGitStatus = useMemo((): LegendGitStatus[] => {
+    const gitLayers = highlightLayers.filter((layer) =>
+      layer.id.startsWith('git-highlight-')
     );
+
+    return gitLayers.map((layer) => ({
+      id: layer.id,
+      name: layer.name,
+      color: layer.color,
+      count: layer.items.length,
+      enabled: layer.enabled,
+    }));
+  }, [highlightLayers]);
+
+  // Toggle git status layer
+  const toggleGitStatus = useCallback((id: string) => {
+    setHighlightLayers((prev) =>
+      prev.map((layer) => {
+        if (layer.id === id) {
+          return { ...layer, enabled: !layer.enabled };
+        }
+        return layer;
+      })
+    );
+  }, []);
+
+  // Toggle layers by extension (toggles both primary and secondary)
+  const toggleFileType = useCallback((ext: string) => {
+    setHighlightLayers((prev) => {
+      // Find current state from primary layer
+      const primaryLayer = prev.find((l) => l.id === `ext-${ext}-primary`);
+      const newEnabled = primaryLayer ? !primaryLayer.enabled : true;
+
+      return prev.map((layer) => {
+        if (layer.id === `ext-${ext}-primary` || layer.id === `ext-${ext}-secondary`) {
+          return { ...layer, enabled: newEnabled };
+        }
+        return layer;
+      });
+    });
   }, []);
 
   // Register/unregister file suffix color layers
@@ -151,11 +335,13 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     // Register file color layers if they should be shown
     if (shouldShowFileColors && !fileColorLayersRegistered.current) {
       const newLayers: HighlightLayer[] = fileColorLayers.map(
-        (layer, idx) => ({
-          id: `file-color-${idx}`,
+        (layer) => ({
+          id: layer.id,
           name: layer.name,
           enabled: true,
           color: layer.color,
+          opacity: layer.opacity,
+          borderWidth: layer.borderWidth,
           priority: layer.priority || 0,
           items: layer.items,
         })
@@ -166,11 +352,36 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     // Unregister file color layers if they shouldn't be shown
     else if (!shouldShowFileColors && fileColorLayersRegistered.current) {
       setHighlightLayers((prev) =>
-        prev.filter((layer) => !layer.id.includes('file-color'))
+        prev.filter((layer) => !layer.id.startsWith('ext-'))
       );
       fileColorLayersRegistered.current = false;
     }
   }, [hasGitOrAgentLayers, fileColorLayers]);
+
+  // Register/unregister git status layers
+  useEffect(() => {
+    const hasGitLayers = gitStatusLayers.length > 0;
+
+    // Register git layers if they're available and not yet registered
+    if (hasGitLayers && !gitLayersRegistered.current) {
+      setHighlightLayers((prev) => [...prev, ...gitStatusLayers]);
+      gitLayersRegistered.current = true;
+    }
+    // Unregister git layers if they're no longer available
+    else if (!hasGitLayers && gitLayersRegistered.current) {
+      setHighlightLayers((prev) =>
+        prev.filter((layer) => !layer.id.startsWith('git-highlight-'))
+      );
+      gitLayersRegistered.current = false;
+    }
+    // Update git layers if they changed (e.g., file moved from unstaged to staged)
+    else if (hasGitLayers && gitLayersRegistered.current) {
+      setHighlightLayers((prev) => {
+        const nonGitLayers = prev.filter((l) => !l.id.startsWith('git-highlight-'));
+        return [...nonGitLayers, ...gitStatusLayers];
+      });
+    }
+  }, [gitStatusLayers]);
 
   // Load city data from file tree
   useEffect(() => {
@@ -207,9 +418,8 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       // Create a builder instance
       const builder = new CodeCityBuilderWithGrid();
 
-      // Build the city data - use root.path from FileTree
-      const rootPath = fileTreeSlice.data.root?.path || context.currentScope.repository?.path || '/';
-      const data = builder.buildCityFromFileSystem(fileSystemTree, rootPath);
+      // Build the city data - use empty string for relative paths
+      const data = builder.buildCityFromFileSystem(fileSystemTree, '');
 
       setCityData(data);
     } catch (error) {
@@ -260,58 +470,21 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <MapIcon size={16} style={{ color: theme.colors.primary }} />
-            <span style={{ fontWeight: 600, fontSize: '14px' }}>
-              Code City Map
-            </span>
+              <MapIcon size={16} style={{ color: theme.colors.primary }} />
+              <span style={{ fontWeight: 600, fontSize: '14px' }}>
+                Code City Map
+              </span>
+            </div>
 
-            {/* Stats badges */}
-            {computedTreeStats &&
-              typeof computedTreeStats.fileCount === 'number' &&
-              typeof computedTreeStats.directoryCount === 'number' && (
-                <>
-                  <span
-                    style={{
-                      fontSize: '12px',
-                      color: theme.colors.textSecondary,
-                      backgroundColor: theme.colors.background,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <File size={12} />
-                    {computedTreeStats.fileCount.toLocaleString()}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '12px',
-                      color: theme.colors.textSecondary,
-                      backgroundColor: theme.colors.background,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <Folder size={12} />
-                    {computedTreeStats.directoryCount.toLocaleString()}
-                  </span>
-                </>
-              )}
-
-            {highlightLayers.length > 0 && (
+            {(legendFileTypes.length > 0 || legendGitStatus.length > 0 || computedTreeStats) && (
               <button
-                onClick={() => setShowLayersPanel(!showLayersPanel)}
+                onClick={() => setShowLegend(!showLegend)}
                 style={{
                   fontSize: '12px',
-                  color: showLayersPanel
+                  color: showLegend
                     ? theme.colors.primary
                     : theme.colors.textSecondary,
-                  backgroundColor: showLayersPanel
+                  backgroundColor: showLegend
                     ? theme.colors.primary + '22'
                     : theme.colors.background,
                   padding: '2px 8px',
@@ -319,146 +492,20 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  border: showLayersPanel
+                  border: showLegend
                     ? `1px solid ${theme.colors.primary}`
                     : '1px solid transparent',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
+                  marginLeft: 'auto',
                 }}
-                title={
-                  showLayersPanel ? 'Hide layers panel' : 'Show layers panel'
-                }
+                title={showLegend ? 'Hide legend' : 'Show legend'}
               >
-                <Layers size={12} />
-                {highlightLayers.length} layer
-                {highlightLayers.length !== 1 ? 's' : ''}
+                <List size={12} />
+                Legend
               </button>
             )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Help button */}
-            <button
-              onClick={() => {
-                // TODO: Show help modal
-              }}
-              style={{
-                height: '32px',
-                padding: '0 12px',
-                fontSize: '12px',
-                backgroundColor: 'transparent',
-                color: theme.colors.text,
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: '4px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-              title="Help"
-            >
-              <HelpCircle size={12} />
-              Help
-            </button>
-          </div>
         </div>
-
-        {/* Second row: Layers carousel */}
-        {showLayersPanel && highlightLayers.length > 0 && (
-          <div
-            style={{
-              padding: '8px 16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                gap: '8px',
-                overflowX: 'auto',
-                overflowY: 'hidden',
-                padding: '4px 0',
-                scrollbarWidth: 'thin',
-              }}
-            >
-              {highlightLayers.map((layer) => (
-                <button
-                  key={layer.id}
-                  onClick={() => setLayerEnabled(layer.id, !layer.enabled)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 12px',
-                    backgroundColor: layer.enabled
-                      ? theme.colors.backgroundLight
-                      : theme.colors.background,
-                    border: `1px solid ${layer.enabled ? layer.color : theme.colors.border}`,
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    flexShrink: 0,
-                    transition: 'all 0.2s ease',
-                    opacity: layer.enabled ? 1 : 0.6,
-                    cursor: 'pointer',
-                  }}
-                  title={
-                    layer.enabled ? `Hide ${layer.name}` : `Show ${layer.name}`
-                  }
-                >
-                  {/* Color indicator */}
-                  <div
-                    style={{
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '3px',
-                      backgroundColor: layer.color,
-                      flexShrink: 0,
-                    }}
-                  />
-
-                  {/* Layer name and count */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '2px',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        color: theme.colors.text,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {layer.name}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '10px',
-                        color: theme.colors.textSecondary,
-                      }}
-                    >
-                      {layer.items.length} item
-                      {layer.items.length !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-
-                  {/* Status indicator */}
-                  {layer.enabled ? (
-                    <Eye size={14} color={theme.colors.primary} />
-                  ) : (
-                    <EyeOff size={14} color={theme.colors.textSecondary} />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* City visualization content */}
@@ -555,7 +602,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
                   hoverInfo.hoveredDistrict?.path ||
                   'Unknown'}
               </div>
-              {/* Full path */}
+              {/* Path */}
               <div
                 style={{
                   color: theme.colors.textSecondary,
@@ -598,6 +645,17 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           </div>
         )}
       </div>
+
+      {/* Legend panel */}
+      {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || computedTreeStats) && (
+        <Legend
+          fileTypes={legendFileTypes}
+          gitStatus={legendGitStatus}
+          stats={computedTreeStats}
+          onItemClick={toggleFileType}
+          onGitStatusClick={toggleGitStatus}
+        />
+      )}
     </div>
   );
 };
