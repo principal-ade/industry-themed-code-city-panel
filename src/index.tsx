@@ -1,6 +1,6 @@
 import { CodeCityPanel } from './panels/CodeCityPanel';
 import type { PanelDefinition, PanelContextValue } from './types';
-import { codeCityPanelTools, codeCityPanelToolsMetadata } from './tools';
+import { codeCityPanelTools } from './tools';
 
 /**
  * Export array of panel definitions.

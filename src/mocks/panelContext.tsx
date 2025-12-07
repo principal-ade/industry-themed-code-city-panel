@@ -292,10 +292,9 @@ export const MockPanelProvider: React.FC<MockPanelProviderProps> = ({
   const events = createMockEvents();
 
   // Clone the child element and inject props, wrapped in ThemeProvider
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (
     <ThemeProvider>
-      {React.cloneElement(children, { context, actions, events } as any)}
+      {React.cloneElement(children, { context, actions, events } as Record<string, unknown>)}
     </ThemeProvider>
   );
 };
