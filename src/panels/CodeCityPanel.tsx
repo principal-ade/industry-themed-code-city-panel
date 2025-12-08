@@ -82,6 +82,21 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   const gitLayersRegistered = useRef(false);
   const lastHasGitOrAgentLayers = useRef<boolean | null>(null);
 
+  // Reset all layer state when repository changes
+  const currentRepoPath = context.currentScope.repository?.path;
+  const lastRepoPath = useRef<string | undefined>(currentRepoPath);
+
+  useEffect(() => {
+    if (lastRepoPath.current !== currentRepoPath) {
+      // Repository changed - reset all layer tracking state
+      setHighlightLayers([]);
+      fileColorLayersRegistered.current = false;
+      gitLayersRegistered.current = false;
+      lastHasGitOrAgentLayers.current = null;
+      lastRepoPath.current = currentRepoPath;
+    }
+  }, [currentRepoPath]);
+
   // Compute tree stats from cityData
   const computedTreeStats = useMemo(() => {
     if (!cityData) {
