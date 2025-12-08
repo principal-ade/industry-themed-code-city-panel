@@ -70,6 +70,7 @@ export const Legend: React.FC<LegendProps> = ({
         borderLeft: isRight ? `1px solid ${theme.colors.border}` : 'none',
         overflowY: 'auto',
         overflowX: 'hidden',
+        boxSizing: 'border-box',
         ...(isRight
           ? {
               width: maxSize,
@@ -99,8 +100,8 @@ export const Legend: React.FC<LegendProps> = ({
           </div>
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 120px))',
+              display: 'flex',
+              flexWrap: 'wrap',
               gap: '8px',
             }}
           >
@@ -119,8 +120,10 @@ export const Legend: React.FC<LegendProps> = ({
                   cursor: onItemClick ? 'pointer' : 'default',
                   opacity: fileType.enabled ? 1 : 0.4,
                   transition: 'all 0.15s ease',
-                  width: '100%',
-                  maxWidth: '120px',
+                  minWidth: '100px',
+                  flex: '1 1 100px',
+                  maxWidth: '200px',
+                  boxSizing: 'border-box',
                 }}
               >
                 {/* Styled rectangle preview */}
@@ -142,6 +145,10 @@ export const Legend: React.FC<LegendProps> = ({
                     fontSize: '12px',
                     color: theme.colors.text,
                     whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flex: 1,
+                    minWidth: 0,
                   }}
                 >
                   {fileType.name}
@@ -150,6 +157,7 @@ export const Legend: React.FC<LegendProps> = ({
                   style={{
                     fontSize: '10px',
                     color: theme.colors.textSecondary,
+                    flexShrink: 0,
                   }}
                 >
                   {fileType.count}
@@ -176,8 +184,8 @@ export const Legend: React.FC<LegendProps> = ({
           </div>
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 120px))',
+              display: 'flex',
+              flexWrap: 'wrap',
               gap: '8px',
             }}
           >
@@ -196,8 +204,10 @@ export const Legend: React.FC<LegendProps> = ({
                   cursor: onGitStatusClick ? 'pointer' : 'default',
                   opacity: status.enabled ? 1 : 0.4,
                   transition: 'all 0.15s ease',
-                  width: '100%',
-                  maxWidth: '120px',
+                  minWidth: '100px',
+                  flex: '1 1 100px',
+                  maxWidth: '200px',
+                  boxSizing: 'border-box',
                 }}
               >
                 {/* Colored circle for git status */}
@@ -216,6 +226,10 @@ export const Legend: React.FC<LegendProps> = ({
                     fontSize: '12px',
                     color: theme.colors.text,
                     whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flex: 1,
+                    minWidth: 0,
                   }}
                 >
                   {status.name}
@@ -224,6 +238,7 @@ export const Legend: React.FC<LegendProps> = ({
                   style={{
                     fontSize: '10px',
                     color: theme.colors.textSecondary,
+                    flexShrink: 0,
                   }}
                 >
                   {status.count}
