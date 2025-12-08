@@ -30,13 +30,24 @@ interface LegendProps {
   stats?: LegendStats | null;
   onItemClick?: (id: string) => void;
   onGitStatusClick?: (id: string) => void;
+  position?: 'bottom' | 'right';
+  maxSize?: number;
 }
 
 /**
  * Legend component that displays file type colors and layer information.
  * Shows styled rectangles that mimic the actual building rendering.
+ * Supports both bottom and right positioning with responsive layout.
  */
-export const Legend: React.FC<LegendProps> = ({ fileTypes, gitStatus, stats, onItemClick, onGitStatusClick }) => {
+export const Legend: React.FC<LegendProps> = ({
+  fileTypes,
+  gitStatus,
+  stats,
+  onItemClick,
+  onGitStatusClick,
+  position = 'bottom',
+  maxSize,
+}) => {
   const { theme } = useTheme();
 
   const hasGitStatus = gitStatus && gitStatus.length > 0;
@@ -44,6 +55,8 @@ export const Legend: React.FC<LegendProps> = ({ fileTypes, gitStatus, stats, onI
   if (fileTypes.length === 0 && !stats && !hasGitStatus) {
     return null;
   }
+
+  const isRight = position === 'right';
 
   return (
     <div
@@ -53,9 +66,20 @@ export const Legend: React.FC<LegendProps> = ({ fileTypes, gitStatus, stats, onI
         gap: '12px',
         padding: '12px 16px',
         backgroundColor: theme.colors.background,
-        borderTop: `1px solid ${theme.colors.border}`,
+        borderTop: isRight ? 'none' : `1px solid ${theme.colors.border}`,
+        borderLeft: isRight ? `1px solid ${theme.colors.border}` : 'none',
         overflowY: 'auto',
-        maxHeight: '200px',
+        overflowX: 'hidden',
+        ...(isRight
+          ? {
+              width: maxSize,
+              maxWidth: maxSize,
+              height: '100%',
+            }
+          : {
+              maxHeight: maxSize && maxSize > 0 ? maxSize : undefined,
+              width: '100%',
+            }),
         flexShrink: 0,
       }}
     >

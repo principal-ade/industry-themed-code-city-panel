@@ -69,6 +69,46 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   const [showLegend, setShowLegend] = useState(true);
   const [highlightLayers, setHighlightLayers] = useState<HighlightLayer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
+  const contentContainerRef = useRef<HTMLDivElement>(null);
+
+  // Measure the content container to compute layout
+  useEffect(() => {
+    const container = contentContainerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerSize({ width, height });
+      }
+    });
+
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Compute layout: square map + legend position
+  const layout = useMemo(() => {
+    if (!containerSize) {
+      return { mapSize: 0, legendPosition: 'bottom' as const, legendSize: 0 };
+    }
+
+    const { width, height } = containerSize;
+    const isLandscape = width > height;
+
+    if (isLandscape) {
+      // Landscape: map is square based on height, legend goes to the right
+      const mapSize = height;
+      const legendSize = width - mapSize;
+      return { mapSize, legendPosition: 'right' as const, legendSize };
+    } else {
+      // Portrait: map is square based on width, legend goes below
+      const mapSize = width;
+      const legendSize = height - mapSize;
+      return { mapSize, legendPosition: 'bottom' as const, legendSize };
+    }
+  }, [containerSize]);
 
   // Get file tree slice for generating city data
   // Uses FileTree format from @principal-ai/repository-abstraction
@@ -523,52 +563,84 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         </div>
       </div>
 
-      {/* City visualization content */}
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {loading ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: theme.colors.textSecondary,
-            }}
-          >
-            Loading repository structure...
-          </div>
-        ) : !cityData ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: theme.colors.textSecondary,
-              gap: '12px',
-            }}
-          >
-            <MapIcon size={32} style={{ opacity: 0.5 }} />
-            <div>
-              {context.currentScope.repository
-                ? 'Building code city visualization...'
-                : 'No repository loaded'}
+      {/* Main content area with map and legend */}
+      <div
+        ref={contentContainerRef}
+        style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: layout.legendPosition === 'right' ? 'row' : 'column',
+        }}
+      >
+        {/* City visualization */}
+        <div
+          style={{
+            width: layout.legendPosition === 'right' ? layout.mapSize : '100%',
+            height: layout.legendPosition === 'bottom' ? layout.mapSize : '100%',
+            flexShrink: 0,
+            position: 'relative',
+          }}
+        >
+          {loading ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: theme.colors.textSecondary,
+              }}
+            >
+              Loading repository structure...
             </div>
-          </div>
-        ) : (
-          <ArchitectureMapHighlightLayers
-            cityData={cityData}
-            highlightLayers={highlightLayers}
-            showLayerControls={false}
-            onLayerToggle={() => {}}
-            defaultDirectoryColor="#111827"
-            onFileClick={handleFileClick}
-            showFileTypeIcons={true}
-            className="w-full h-full"
-            showLegend={false}
-            showDirectoryLabels={true}
-            onHover={handleHover}
+          ) : !cityData ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: theme.colors.textSecondary,
+                gap: '12px',
+              }}
+            >
+              <MapIcon size={32} style={{ opacity: 0.5 }} />
+              <div>
+                {context.currentScope.repository
+                  ? 'Building code city visualization...'
+                  : 'No repository loaded'}
+              </div>
+            </div>
+          ) : (
+            <ArchitectureMapHighlightLayers
+              cityData={cityData}
+              highlightLayers={highlightLayers}
+              showLayerControls={false}
+              onLayerToggle={() => {}}
+              defaultDirectoryColor="#111827"
+              onFileClick={handleFileClick}
+              showFileTypeIcons={true}
+              className="w-full h-full"
+              showLegend={false}
+              showDirectoryLabels={true}
+              onHover={handleHover}
+            />
+          )}
+        </div>
+
+        {/* Legend panel - positioned based on layout */}
+        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || computedTreeStats) && (
+          <Legend
+            fileTypes={legendFileTypes}
+            gitStatus={legendGitStatus}
+            stats={computedTreeStats}
+            onItemClick={toggleFileType}
+            onGitStatusClick={toggleGitStatus}
+            position={layout.legendPosition}
+            maxSize={layout.legendSize}
           />
         )}
       </div>
@@ -660,17 +732,6 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           </div>
         )}
       </div>
-
-      {/* Legend panel */}
-      {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || computedTreeStats) && (
-        <Legend
-          fileTypes={legendFileTypes}
-          gitStatus={legendGitStatus}
-          stats={computedTreeStats}
-          onItemClick={toggleFileType}
-          onGitStatusClick={toggleGitStatus}
-        />
-      )}
     </div>
   );
 };
