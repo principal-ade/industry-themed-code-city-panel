@@ -88,25 +88,25 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     return () => resizeObserver.disconnect();
   }, []);
 
-  // Compute layout: square map + legend position
+  // Compute layout: map gets minimum square size, legend fills remaining space
   const layout = useMemo(() => {
     if (!containerSize) {
-      return { mapSize: 0, legendPosition: 'bottom' as const, legendSize: 0 };
+      return { minMapSize: 0, legendPosition: 'bottom' as const, legendMaxSize: 0 };
     }
 
     const { width, height } = containerSize;
     const isLandscape = width > height;
 
     if (isLandscape) {
-      // Landscape: map is square based on height, legend goes to the right
-      const mapSize = height;
-      const legendSize = width - mapSize;
-      return { mapSize, legendPosition: 'right' as const, legendSize };
+      // Landscape: legend on right, map min-width is the height (square)
+      const minMapSize = height;
+      const legendMaxSize = width - minMapSize;
+      return { minMapSize, legendPosition: 'right' as const, legendMaxSize };
     } else {
-      // Portrait: map is square based on width, legend goes below
-      const mapSize = width;
-      const legendSize = height - mapSize;
-      return { mapSize, legendPosition: 'bottom' as const, legendSize };
+      // Portrait: legend below, map min-height is the width (square)
+      const minMapSize = width;
+      const legendMaxSize = height - minMapSize;
+      return { minMapSize, legendPosition: 'bottom' as const, legendMaxSize };
     }
   }, [containerSize]);
 
@@ -574,61 +574,154 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           flexDirection: layout.legendPosition === 'right' ? 'row' : 'column',
         }}
       >
-        {/* City visualization */}
+        {/* City visualization with hover bar */}
         <div
           style={{
-            width: layout.legendPosition === 'right' ? layout.mapSize : '100%',
-            height: layout.legendPosition === 'bottom' ? layout.mapSize : '100%',
-            flexShrink: 0,
+            minWidth: layout.legendPosition === 'right' ? layout.minMapSize : undefined,
+            minHeight: layout.legendPosition === 'bottom' ? layout.minMapSize : undefined,
+            flex: 1,
             position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          {loading ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: theme.colors.textSecondary,
-              }}
-            >
-              Loading repository structure...
-            </div>
-          ) : !cityData ? (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: theme.colors.textSecondary,
-                gap: '12px',
-              }}
-            >
-              <MapIcon size={32} style={{ opacity: 0.5 }} />
-              <div>
-                {context.currentScope.repository
-                  ? 'Building code city visualization...'
-                  : 'No repository loaded'}
+          {/* Map area */}
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+            {loading ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: theme.colors.textSecondary,
+                }}
+              >
+                Loading repository structure...
               </div>
-            </div>
-          ) : (
-            <ArchitectureMapHighlightLayers
-              cityData={cityData}
-              highlightLayers={highlightLayers}
-              showLayerControls={false}
-              onLayerToggle={() => {}}
-              defaultDirectoryColor="#111827"
-              onFileClick={handleFileClick}
-              showFileTypeIcons={true}
-              className="w-full h-full"
-              showLegend={false}
-              showDirectoryLabels={true}
-              onHover={handleHover}
-            />
-          )}
+            ) : !cityData ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: theme.colors.textSecondary,
+                  gap: '12px',
+                }}
+              >
+                <MapIcon size={32} style={{ opacity: 0.5 }} />
+                <div>
+                  {context.currentScope.repository
+                    ? 'Building code city visualization...'
+                    : 'No repository loaded'}
+                </div>
+              </div>
+            ) : (
+              <ArchitectureMapHighlightLayers
+                cityData={cityData}
+                highlightLayers={highlightLayers}
+                showLayerControls={false}
+                onLayerToggle={() => {}}
+                defaultDirectoryColor="#111827"
+                onFileClick={handleFileClick}
+                showFileTypeIcons={true}
+                className="w-full h-full"
+                showLegend={false}
+                showDirectoryLabels={true}
+                onHover={handleHover}
+              />
+            )}
+          </div>
+
+          {/* Hover Information Bar - inside map area */}
+          <div
+            style={{
+              height: '48px',
+              borderTop: `1px solid ${theme.colors.border}`,
+              backgroundColor: theme.colors.background,
+              display: 'flex',
+              alignItems: 'center',
+              padding: '0 12px',
+              fontSize: '12px',
+              color: theme.colors.text,
+              gap: '12px',
+              flexShrink: 0,
+            }}
+          >
+            {hoverInfo &&
+            (hoverInfo.hoveredBuilding || hoverInfo.hoveredDistrict) ? (
+              <>
+                {/* File/Directory name and path */}
+                <div
+                  style={{
+                    flex: '1 1 auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1px',
+                    minWidth: 0,
+                  }}
+                >
+                  {/* Name (filename or last directory part) */}
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: theme.colors.primary,
+                      fontSize: '13px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {hoverInfo.fileTooltip?.text ||
+                      hoverInfo.hoveredDistrict?.path?.split('/').pop() ||
+                      hoverInfo.hoveredDistrict?.path ||
+                      'Unknown'}
+                  </div>
+                  {/* Path */}
+                  <div
+                    style={{
+                      color: theme.colors.textSecondary,
+                      fontSize: '10px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {hoverInfo.hoveredBuilding?.path ||
+                      hoverInfo.hoveredDistrict?.path ||
+                      '/'}
+                  </div>
+                </div>
+
+                {/* File count for directories */}
+                {hoverInfo.hoveredDistrict && hoverInfo.fileCount !== null && (
+                  <div
+                    style={{
+                      color: theme.colors.textSecondary,
+                      fontSize: '11px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {hoverInfo.fileCount}{' '}
+                    {hoverInfo.fileCount === 1 ? 'file' : 'files'}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Default help text when not hovering */
+              <div
+                style={{
+                  color: theme.colors.textSecondary,
+                  fontStyle: 'italic',
+                  fontSize: '11px',
+                }}
+              >
+                Hover over files and directories to see details • Click to open
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Legend panel - positioned based on layout */}
@@ -640,96 +733,8 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
             onItemClick={toggleFileType}
             onGitStatusClick={toggleGitStatus}
             position={layout.legendPosition}
-            maxSize={layout.legendSize}
+            maxSize={layout.legendMaxSize}
           />
-        )}
-      </div>
-
-      {/* Hover Information Bar */}
-      <div
-        style={{
-          height: '56px',
-          borderTop: `1px solid ${theme.colors.border}`,
-          backgroundColor: theme.colors.background,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 16px',
-          fontSize: '13px',
-          color: theme.colors.text,
-          gap: '16px',
-          flexShrink: 0,
-        }}
-      >
-        {hoverInfo &&
-        (hoverInfo.hoveredBuilding || hoverInfo.hoveredDistrict) ? (
-          <>
-            {/* File/Directory name and path */}
-            <div
-              style={{
-                flex: '1 1 auto',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-                minWidth: 0,
-              }}
-            >
-              {/* Name (filename or last directory part) */}
-              <div
-                style={{
-                  fontWeight: 600,
-                  color: theme.colors.primary,
-                  fontSize: '14px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {hoverInfo.fileTooltip?.text ||
-                  hoverInfo.hoveredDistrict?.path?.split('/').pop() ||
-                  hoverInfo.hoveredDistrict?.path ||
-                  'Unknown'}
-              </div>
-              {/* Path */}
-              <div
-                style={{
-                  color: theme.colors.textSecondary,
-                  fontSize: '11px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {hoverInfo.hoveredBuilding?.path ||
-                  hoverInfo.hoveredDistrict?.path ||
-                  '/'}
-              </div>
-            </div>
-
-            {/* File count for directories */}
-            {hoverInfo.hoveredDistrict && hoverInfo.fileCount !== null && (
-              <div
-                style={{
-                  color: theme.colors.textSecondary,
-                  fontSize: '12px',
-                  flexShrink: 0,
-                }}
-              >
-                {hoverInfo.fileCount}{' '}
-                {hoverInfo.fileCount === 1 ? 'file' : 'files'}
-              </div>
-            )}
-          </>
-        ) : (
-          /* Default help text when not hovering */
-          <div
-            style={{
-              color: theme.colors.textSecondary,
-              fontStyle: 'italic',
-            }}
-          >
-            Hover over files and directories to see details • Click files to
-            open
-          </div>
         )}
       </div>
     </div>
