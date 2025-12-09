@@ -117,9 +117,13 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   // Get git status slice for highlighting changed files
   const gitSlice = context.getSlice<GitStatus>('git');
 
+  // Get agent highlight layers slice for showing agent activity
+  const agentHighlightLayersSlice = context.getSlice<HighlightLayer[]>('agentHighlightLayers');
+
   // Track whether file color layers are currently registered
   const fileColorLayersRegistered = useRef(false);
   const gitLayersRegistered = useRef(false);
+  const agentLayersRegistered = useRef(false);
   const lastHasGitOrAgentLayers = useRef<boolean | null>(null);
 
   // Reset all layer state when repository changes
@@ -132,6 +136,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       setHighlightLayers([]);
       fileColorLayersRegistered.current = false;
       gitLayersRegistered.current = false;
+      agentLayersRegistered.current = false;
       lastHasGitOrAgentLayers.current = null;
       lastRepoPath.current = currentRepoPath;
     }
@@ -437,6 +442,49 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       });
     }
   }, [gitStatusLayers]);
+
+  // Register/unregister agent highlight layers from the slice
+  useEffect(() => {
+    const agentLayers = agentHighlightLayersSlice?.data || [];
+    const hasAgentLayers = agentLayers.length > 0;
+
+    // Register agent layers if they're available and not yet registered
+    if (hasAgentLayers && !agentLayersRegistered.current) {
+      // Convert to our HighlightLayer format with event-highlight prefix for tracking
+      const formattedLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
+        id: layer.id || `event-highlight-${idx}`,
+        name: layer.name,
+        enabled: layer.enabled,
+        color: layer.color,
+        priority: layer.priority || 50,
+        items: layer.items,
+      }));
+      setHighlightLayers((prev) => [...prev, ...formattedLayers]);
+      agentLayersRegistered.current = true;
+    }
+    // Unregister agent layers if they're no longer available
+    else if (!hasAgentLayers && agentLayersRegistered.current) {
+      setHighlightLayers((prev) =>
+        prev.filter((layer) => !layer.id.startsWith('event-highlight'))
+      );
+      agentLayersRegistered.current = false;
+    }
+    // Update agent layers if they changed (new events, navigation, etc.)
+    else if (hasAgentLayers && agentLayersRegistered.current) {
+      setHighlightLayers((prev) => {
+        const nonAgentLayers = prev.filter((l) => !l.id.startsWith('event-highlight'));
+        const formattedLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
+          id: layer.id || `event-highlight-${idx}`,
+          name: layer.name,
+          enabled: layer.enabled,
+          color: layer.color,
+          priority: layer.priority || 50,
+          items: layer.items,
+        }));
+        return [...nonAgentLayers, ...formattedLayers];
+      });
+    }
+  }, [agentHighlightLayersSlice?.data]);
 
   // Load city data from file tree
   useEffect(() => {
