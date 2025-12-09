@@ -4,7 +4,7 @@ import {
   Building2,
   List,
 } from 'lucide-react';
-import { Legend, LegendFileType, LegendGitStatus } from './components/Legend';
+import { Legend, LegendFileType, LegendGitStatus, LegendAgentLayer } from './components/Legend';
 import { useTheme } from '@principal-ade/industry-theme';
 import {
   ArchitectureMapHighlightLayers,
@@ -353,6 +353,21 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     }));
   }, [highlightLayers]);
 
+  // Compute legend agent layer items from highlight layers
+  const legendAgentLayers = useMemo((): LegendAgentLayer[] => {
+    const agentLayers = highlightLayers.filter((layer) =>
+      layer.id.startsWith('event-highlight')
+    );
+
+    return agentLayers.map((layer) => ({
+      id: layer.id,
+      name: layer.name,
+      color: layer.color,
+      count: layer.items.length,
+      enabled: layer.enabled,
+    }));
+  }, [highlightLayers]);
+
   // Toggle git status layer
   const toggleGitStatus = useCallback((id: string) => {
     setHighlightLayers((prev) =>
@@ -363,6 +378,26 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         return layer;
       })
     );
+  }, []);
+
+  // Toggle agent layer
+  const toggleAgentLayer = useCallback((id: string) => {
+    setHighlightLayers((prev) =>
+      prev.map((layer) => {
+        if (layer.id === id) {
+          return { ...layer, enabled: !layer.enabled };
+        }
+        return layer;
+      })
+    );
+  }, []);
+
+  // Clear all agent layers
+  const clearAgentLayers = useCallback(() => {
+    setHighlightLayers((prev) =>
+      prev.filter((layer) => !layer.id.startsWith('event-highlight'))
+    );
+    agentLayersRegistered.current = false;
   }, []);
 
   // Toggle layers by extension (toggles both primary and secondary)
@@ -783,13 +818,16 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         </div>
 
         {/* Legend panel - positioned based on layout */}
-        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || computedTreeStats) && (
+        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendAgentLayers.length > 0 || computedTreeStats) && (
           <Legend
             fileTypes={legendFileTypes}
             gitStatus={legendGitStatus}
+            agentLayers={legendAgentLayers}
             stats={computedTreeStats}
             onItemClick={toggleFileType}
             onGitStatusClick={toggleGitStatus}
+            onAgentLayerClick={toggleAgentLayer}
+            onClearAgentLayers={clearAgentLayers}
             position={layout.legendPosition}
             maxSize={layout.legendMaxSize}
           />
