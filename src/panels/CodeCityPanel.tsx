@@ -459,8 +459,13 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         priority: layer.priority || 50,
         items: layer.items,
       }));
-      setHighlightLayers((prev) => [...prev, ...formattedLayers]);
+      // When adding agent layers, also remove file color layers immediately
+      setHighlightLayers((prev) => {
+        const withoutFileColors = prev.filter((layer) => !layer.id.startsWith('ext-'));
+        return [...withoutFileColors, ...formattedLayers];
+      });
       agentLayersRegistered.current = true;
+      fileColorLayersRegistered.current = false; // Mark file colors as unregistered
     }
     // Unregister agent layers if they're no longer available
     else if (!hasAgentLayers && agentLayersRegistered.current) {
@@ -468,11 +473,15 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         prev.filter((layer) => !layer.id.startsWith('event-highlight'))
       );
       agentLayersRegistered.current = false;
+      // File color layers will be re-added by the file color effect on next render
     }
     // Update agent layers if they changed (new events, navigation, etc.)
     else if (hasAgentLayers && agentLayersRegistered.current) {
       setHighlightLayers((prev) => {
-        const nonAgentLayers = prev.filter((l) => !l.id.startsWith('event-highlight'));
+        // Also ensure file colors stay removed when updating agent layers
+        const nonAgentNonFileLayers = prev.filter(
+          (l) => !l.id.startsWith('event-highlight') && !l.id.startsWith('ext-')
+        );
         const formattedLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
           id: layer.id || `event-highlight-${idx}`,
           name: layer.name,
@@ -481,8 +490,9 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           priority: layer.priority || 50,
           items: layer.items,
         }));
-        return [...nonAgentLayers, ...formattedLayers];
+        return [...nonAgentNonFileLayers, ...formattedLayers];
       });
+      fileColorLayersRegistered.current = false; // Ensure file colors stay marked as unregistered
     }
   }, [agentHighlightLayersSlice?.data]);
 
