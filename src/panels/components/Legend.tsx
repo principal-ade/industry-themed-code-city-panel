@@ -1,6 +1,7 @@
 import React from 'react';
-import { File, Folder, Activity, X } from 'lucide-react';
+import { File, Folder, Activity, X, BarChart3 } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
+import type { ColorMode } from '../utils/qualityLayers';
 
 export interface LegendFileType {
   id: string;
@@ -27,6 +28,14 @@ export interface LegendAgentLayer {
   enabled: boolean;
 }
 
+export interface LegendQualityMetric {
+  id: string;
+  name: string;
+  color: string;
+  count: number;
+  enabled: boolean;
+}
+
 interface LegendStats {
   fileCount: number;
   directoryCount: number;
@@ -36,10 +45,13 @@ interface LegendProps {
   fileTypes: LegendFileType[];
   gitStatus?: LegendGitStatus[];
   agentLayers?: LegendAgentLayer[];
+  qualityMetrics?: LegendQualityMetric[];
+  colorMode?: ColorMode;
   stats?: LegendStats | null;
   onItemClick?: (id: string) => void;
   onGitStatusClick?: (id: string) => void;
   onAgentLayerClick?: (id: string) => void;
+  onQualityMetricClick?: (id: string) => void;
   onClearAgentLayers?: () => void;
   position?: 'bottom' | 'right';
   maxSize?: number;
@@ -54,10 +66,13 @@ export const Legend: React.FC<LegendProps> = ({
   fileTypes,
   gitStatus,
   agentLayers,
+  qualityMetrics,
+  colorMode,
   stats,
   onItemClick,
   onGitStatusClick,
   onAgentLayerClick,
+  onQualityMetricClick,
   onClearAgentLayers,
   position = 'bottom',
   maxSize,
@@ -66,10 +81,21 @@ export const Legend: React.FC<LegendProps> = ({
 
   const hasGitStatus = gitStatus && gitStatus.length > 0;
   const hasAgentLayers = agentLayers && agentLayers.length > 0;
+  const hasQualityMetrics = qualityMetrics && qualityMetrics.length > 0;
 
-  if (fileTypes.length === 0 && !stats && !hasGitStatus && !hasAgentLayers) {
+  if (fileTypes.length === 0 && !stats && !hasGitStatus && !hasAgentLayers && !hasQualityMetrics) {
     return null;
   }
+
+  // Get the quality mode label for display
+  const qualityModeLabels: Record<string, string> = {
+    coverage: 'Test Coverage',
+    eslint: 'Linting Quality',
+    typescript: 'Type Safety',
+    prettier: 'Code Formatting',
+    knip: 'Dead Code Analysis',
+    alexandria: 'Documentation',
+  };
 
   const isRight = position === 'right';
 
@@ -372,6 +398,93 @@ export const Legend: React.FC<LegendProps> = ({
                   }}
                 >
                   {layer.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quality metrics section - shows coverage/linting/type safety metrics */}
+      {hasQualityMetrics && colorMode && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: theme.colors.textSecondary,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}
+          >
+            <BarChart3 size={12} />
+            {qualityModeLabels[colorMode] || 'Quality Metrics'}
+          </div>
+
+          {/* Quality metric items - now with clear labels like "0 issues", "80-100%" */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {qualityMetrics!.map((metric) => (
+              <button
+                key={metric.id}
+                onClick={() => onQualityMetricClick?.(metric.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 10px',
+                  backgroundColor: theme.colors.backgroundLight,
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: '4px',
+                  cursor: onQualityMetricClick ? 'pointer' : 'default',
+                  opacity: metric.enabled ? 1 : 0.4,
+                  transition: 'all 0.15s ease',
+                  minWidth: '100px',
+                  flex: '1 1 100px',
+                  maxWidth: '200px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {/* Colored circle for metric category */}
+                <div
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    backgroundColor: metric.color,
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: theme.colors.text,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {metric.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    color: theme.colors.textSecondary,
+                    flexShrink: 0,
+                  }}
+                >
+                  {metric.count} {metric.count === 1 ? 'file' : 'files'}
                 </span>
               </button>
             ))}

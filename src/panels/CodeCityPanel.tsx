@@ -3,8 +3,9 @@ import {
   MapIcon,
   Building2,
   List,
+  ChevronDown,
 } from 'lucide-react';
-import { Legend, LegendFileType, LegendGitStatus, LegendAgentLayer } from './components/Legend';
+import { Legend, LegendFileType, LegendGitStatus, LegendAgentLayer, LegendQualityMetric } from './components/Legend';
 import { useTheme } from '@principal-ade/industry-theme';
 import {
   ArchitectureMapHighlightLayers,
@@ -20,6 +21,14 @@ import {
 } from '@principal-ai/code-city-builder';
 import type { FileTree } from '@principal-ai/repository-abstraction';
 import type { PanelComponentProps } from '../types';
+import {
+  type ColorMode,
+  type QualitySliceData,
+  COLOR_MODES,
+  isColorModeAvailable,
+  getLayersForColorMode,
+  SCORE_THRESHOLDS,
+} from './utils/qualityLayers';
 
 /**
  * Git status data - categorized file paths
@@ -71,6 +80,9 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   const [loading, setLoading] = useState(false);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
   const contentContainerRef = useRef<HTMLDivElement>(null);
+  const [colorMode, setColorMode] = useState<ColorMode>('fileTypes');
+  const [showColorModeDropdown, setShowColorModeDropdown] = useState(false);
+  const colorModeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Measure the content container to compute layout
   useEffect(() => {
@@ -120,6 +132,9 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   // Get agent highlight layers slice for showing agent activity
   const agentHighlightLayersSlice = context.getSlice<HighlightLayer[]>('agentHighlightLayers');
 
+  // Get quality slice for coverage and metrics visualization
+  const qualitySlice = context.getSlice<QualitySliceData>('quality');
+
   // Track whether file color layers are currently registered
   const fileColorLayersRegistered = useRef(false);
   const gitLayersRegistered = useRef(false);
@@ -139,8 +154,105 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       agentLayersRegistered.current = false;
       lastHasGitOrAgentLayers.current = null;
       lastRepoPath.current = currentRepoPath;
+      setColorMode('fileTypes'); // Reset to default color mode
     }
   }, [currentRepoPath]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (colorModeDropdownRef.current && !colorModeDropdownRef.current.contains(event.target as Node)) {
+        setShowColorModeDropdown(false);
+      }
+    };
+
+    if (showColorModeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showColorModeDropdown]);
+
+  // Compute available color modes based on data
+  const availableColorModes = useMemo(() => {
+    const hasGitData = gitSlice?.data && (
+      gitSlice.data.staged.length > 0 ||
+      gitSlice.data.unstaged.length > 0 ||
+      gitSlice.data.untracked.length > 0 ||
+      gitSlice.data.deleted.length > 0
+    );
+
+    return COLOR_MODES.filter(mode =>
+      isColorModeAvailable(mode.id, qualitySlice?.data, !!hasGitData)
+    );
+  }, [gitSlice?.data, qualitySlice?.data]);
+
+  // Get current color mode config
+  const currentColorModeConfig = useMemo(() => {
+    return COLOR_MODES.find(m => m.id === colorMode) || COLOR_MODES[0];
+  }, [colorMode]);
+
+  // Get metric value for hovered file (used in hover bar)
+  const hoveredFileMetric = useMemo(() => {
+    if (!hoverInfo?.hoveredBuilding?.path) return null;
+    const filePath = hoverInfo.hoveredBuilding.path;
+    const qualityData = qualitySlice?.data;
+
+    if (!qualityData) return null;
+
+    switch (colorMode) {
+      case 'coverage': {
+        const coverage = qualityData.fileCoverage?.[filePath];
+        if (coverage !== undefined) {
+          return { type: 'coverage', value: coverage, label: `${Math.round(coverage)}% coverage` };
+        }
+        return { type: 'coverage', value: null, label: 'No coverage data' };
+      }
+      case 'eslint': {
+        const metric = qualityData.fileMetrics?.eslint?.find(m => m.file === filePath);
+        if (metric) {
+          const parts = [];
+          if (metric.errorCount > 0) parts.push(`${metric.errorCount} error${metric.errorCount > 1 ? 's' : ''}`);
+          if (metric.warningCount > 0) parts.push(`${metric.warningCount} warning${metric.warningCount > 1 ? 's' : ''}`);
+          return { type: 'eslint', value: metric, label: parts.length > 0 ? parts.join(', ') : 'No issues' };
+        }
+        return { type: 'eslint', value: null, label: 'No lint data' };
+      }
+      case 'typescript': {
+        const metric = qualityData.fileMetrics?.typescript?.find(m => m.file === filePath);
+        if (metric) {
+          const errors = metric.errorCount;
+          return { type: 'typescript', value: metric, label: errors > 0 ? `${errors} type error${errors > 1 ? 's' : ''}` : 'No type errors' };
+        }
+        return { type: 'typescript', value: null, label: 'No type data' };
+      }
+      case 'prettier': {
+        const metric = qualityData.fileMetrics?.prettier?.find(m => m.file === filePath);
+        if (metric) {
+          const issues = metric.issueCount;
+          return { type: 'prettier', value: metric, label: issues > 0 ? `${issues} formatting issue${issues > 1 ? 's' : ''}` : 'Properly formatted' };
+        }
+        return { type: 'prettier', value: null, label: 'No format data' };
+      }
+      case 'knip': {
+        const metric = qualityData.fileMetrics?.knip?.find(m => m.file === filePath);
+        if (metric) {
+          const issues = metric.issueCount;
+          return { type: 'knip', value: metric, label: issues > 0 ? `${issues} unused export${issues > 1 ? 's' : ''}` : 'No dead code' };
+        }
+        return { type: 'knip', value: null, label: 'No dead code data' };
+      }
+      case 'alexandria': {
+        const metric = qualityData.fileMetrics?.alexandria?.find(m => m.file === filePath);
+        if (metric) {
+          const issues = metric.issueCount;
+          return { type: 'alexandria', value: metric, label: issues > 0 ? `${issues} doc issue${issues > 1 ? 's' : ''}` : 'Well documented' };
+        }
+        return { type: 'alexandria', value: null, label: 'No doc data' };
+      }
+      default:
+        return null;
+    }
+  }, [hoverInfo?.hoveredBuilding?.path, colorMode, qualitySlice?.data]);
 
   // Compute tree stats from cityData
   const computedTreeStats = useMemo(() => {
@@ -286,6 +398,22 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     return layers;
   }, [cityData, gitSlice?.data]);
 
+  // Generate quality-based layers using the utility functions
+  const qualityLayers = useMemo((): HighlightLayer[] => {
+    if (!cityData?.buildings) return [];
+
+    // Only compute if we're in a quality color mode
+    if (colorMode === 'fileTypes' || colorMode === 'git') return [];
+
+    return getLayersForColorMode(
+      colorMode,
+      cityData.buildings,
+      qualitySlice?.data,
+      [], // Not needed for quality modes
+      []  // Not needed for quality modes
+    );
+  }, [cityData, colorMode, qualitySlice?.data]);
+
   // Compute whether git/agent layers exist
   const hasGitOrAgentLayers = useMemo(() => {
     return highlightLayers.some(
@@ -368,6 +496,40 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     }));
   }, [highlightLayers]);
 
+  // Compute legend quality metrics from highlight layers (for quality color modes)
+  const legendQualityMetrics = useMemo((): LegendQualityMetric[] => {
+    // Check if we're in a quality color mode
+    const qualityModeIds = ['coverage', 'eslint', 'typescript', 'prettier', 'knip', 'alexandria'];
+    if (!qualityModeIds.includes(colorMode)) {
+      return [];
+    }
+
+    // Find quality layers based on the color mode prefix
+    const qualityLayerPrefixes: Record<string, string> = {
+      coverage: 'coverage-',
+      eslint: 'eslint-',
+      typescript: 'typescript-',
+      prettier: 'prettier-',
+      knip: 'knip-',
+      alexandria: 'alexandria-',
+    };
+
+    const prefix = qualityLayerPrefixes[colorMode];
+    if (!prefix) return [];
+
+    const relevantLayers = highlightLayers.filter((layer) =>
+      layer.id.startsWith(prefix)
+    );
+
+    return relevantLayers.map((layer) => ({
+      id: layer.id,
+      name: layer.name,
+      color: layer.color,
+      count: layer.items.length,
+      enabled: layer.enabled,
+    }));
+  }, [highlightLayers, colorMode]);
+
   // Toggle git status layer
   const toggleGitStatus = useCallback((id: string) => {
     setHighlightLayers((prev) =>
@@ -400,6 +562,18 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     agentLayersRegistered.current = false;
   }, []);
 
+  // Toggle quality metric layer
+  const toggleQualityMetric = useCallback((id: string) => {
+    setHighlightLayers((prev) =>
+      prev.map((layer) => {
+        if (layer.id === id) {
+          return { ...layer, enabled: !layer.enabled };
+        }
+        return layer;
+      })
+    );
+  }, []);
+
   // Toggle layers by extension (toggles both primary and secondary)
   const toggleFileType = useCallback((ext: string) => {
     setHighlightLayers((prev) => {
@@ -416,21 +590,26 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     });
   }, []);
 
-  // Register/unregister file suffix color layers
+  // Update highlight layers based on color mode
+  // This effect manages which layers are shown based on the selected color mode
   useEffect(() => {
-    const shouldShowFileColors =
-      !hasGitOrAgentLayers && fileColorLayers.length > 0;
+    // Get agent layers (they're always shown on top when present)
+    const agentLayers = agentHighlightLayersSlice?.data || [];
+    const formattedAgentLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
+      id: layer.id || `event-highlight-${idx}`,
+      name: layer.name,
+      enabled: layer.enabled,
+      color: layer.color,
+      priority: layer.priority || 150, // High priority so they're on top
+      items: layer.items,
+    }));
 
-    const gitAgentStateChanged =
-      lastHasGitOrAgentLayers.current !== hasGitOrAgentLayers;
-    if (gitAgentStateChanged) {
-      lastHasGitOrAgentLayers.current = hasGitOrAgentLayers;
-    }
+    // Get layers for the selected color mode
+    let modeLayers: HighlightLayer[] = [];
 
-    // Register file color layers if they should be shown
-    if (shouldShowFileColors && !fileColorLayersRegistered.current) {
-      const newLayers: HighlightLayer[] = fileColorLayers.map(
-        (layer) => ({
+    switch (colorMode) {
+      case 'fileTypes':
+        modeLayers = fileColorLayers.map((layer) => ({
           id: layer.id,
           name: layer.name,
           enabled: true,
@@ -439,97 +618,28 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           borderWidth: layer.borderWidth,
           priority: layer.priority || 0,
           items: layer.items,
-        })
-      );
-      setHighlightLayers((prev) => [...prev, ...newLayers]);
-      fileColorLayersRegistered.current = true;
-    }
-    // Unregister file color layers if they shouldn't be shown
-    else if (!shouldShowFileColors && fileColorLayersRegistered.current) {
-      setHighlightLayers((prev) =>
-        prev.filter((layer) => !layer.id.startsWith('ext-'))
-      );
-      fileColorLayersRegistered.current = false;
-    }
-  }, [hasGitOrAgentLayers, fileColorLayers]);
-
-  // Register/unregister git status layers
-  useEffect(() => {
-    const hasGitLayers = gitStatusLayers.length > 0;
-
-    // Register git layers if they're available and not yet registered
-    if (hasGitLayers && !gitLayersRegistered.current) {
-      setHighlightLayers((prev) => [...prev, ...gitStatusLayers]);
-      gitLayersRegistered.current = true;
-    }
-    // Unregister git layers if they're no longer available
-    else if (!hasGitLayers && gitLayersRegistered.current) {
-      setHighlightLayers((prev) =>
-        prev.filter((layer) => !layer.id.startsWith('git-highlight-'))
-      );
-      gitLayersRegistered.current = false;
-    }
-    // Update git layers if they changed (e.g., file moved from unstaged to staged)
-    else if (hasGitLayers && gitLayersRegistered.current) {
-      setHighlightLayers((prev) => {
-        const nonGitLayers = prev.filter((l) => !l.id.startsWith('git-highlight-'));
-        return [...nonGitLayers, ...gitStatusLayers];
-      });
-    }
-  }, [gitStatusLayers]);
-
-  // Register/unregister agent highlight layers from the slice
-  useEffect(() => {
-    const agentLayers = agentHighlightLayersSlice?.data || [];
-    const hasAgentLayers = agentLayers.length > 0;
-
-    // Register agent layers if they're available and not yet registered
-    if (hasAgentLayers && !agentLayersRegistered.current) {
-      // Convert to our HighlightLayer format with event-highlight prefix for tracking
-      const formattedLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
-        id: layer.id || `event-highlight-${idx}`,
-        name: layer.name,
-        enabled: layer.enabled,
-        color: layer.color,
-        priority: layer.priority || 50,
-        items: layer.items,
-      }));
-      // When adding agent layers, also remove file color layers immediately
-      setHighlightLayers((prev) => {
-        const withoutFileColors = prev.filter((layer) => !layer.id.startsWith('ext-'));
-        return [...withoutFileColors, ...formattedLayers];
-      });
-      agentLayersRegistered.current = true;
-      fileColorLayersRegistered.current = false; // Mark file colors as unregistered
-    }
-    // Unregister agent layers if they're no longer available
-    else if (!hasAgentLayers && agentLayersRegistered.current) {
-      setHighlightLayers((prev) =>
-        prev.filter((layer) => !layer.id.startsWith('event-highlight'))
-      );
-      agentLayersRegistered.current = false;
-      // File color layers will be re-added by the file color effect on next render
-    }
-    // Update agent layers if they changed (new events, navigation, etc.)
-    else if (hasAgentLayers && agentLayersRegistered.current) {
-      setHighlightLayers((prev) => {
-        // Also ensure file colors stay removed when updating agent layers
-        const nonAgentNonFileLayers = prev.filter(
-          (l) => !l.id.startsWith('event-highlight') && !l.id.startsWith('ext-')
-        );
-        const formattedLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
-          id: layer.id || `event-highlight-${idx}`,
-          name: layer.name,
-          enabled: layer.enabled,
-          color: layer.color,
-          priority: layer.priority || 50,
-          items: layer.items,
         }));
-        return [...nonAgentNonFileLayers, ...formattedLayers];
-      });
-      fileColorLayersRegistered.current = false; // Ensure file colors stay marked as unregistered
+        break;
+
+      case 'git':
+        modeLayers = gitStatusLayers;
+        break;
+
+      default:
+        // Quality modes (coverage, eslint, typescript, etc.)
+        modeLayers = qualityLayers;
+        break;
     }
-  }, [agentHighlightLayersSlice?.data]);
+
+    // Combine mode layers with agent layers (agent layers on top)
+    const allLayers = [...modeLayers, ...formattedAgentLayers];
+    setHighlightLayers(allLayers);
+
+    // Update tracking refs
+    fileColorLayersRegistered.current = colorMode === 'fileTypes';
+    gitLayersRegistered.current = colorMode === 'git';
+    agentLayersRegistered.current = formattedAgentLayers.length > 0;
+  }, [colorMode, fileColorLayers, gitStatusLayers, qualityLayers, agentHighlightLayersSlice?.data]);
 
   // Load city data from file tree
   useEffect(() => {
@@ -615,44 +725,147 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
             padding: '4px 16px',
             borderBottom: `1px solid ${theme.colors.border}`,
             flexShrink: 0,
+            gap: '12px',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <MapIcon size={16} style={{ color: theme.colors.primary }} />
-              <span style={{ fontWeight: 600, fontSize: '14px' }}>
-                Code City Map
-              </span>
-            </div>
+            <MapIcon size={16} style={{ color: theme.colors.primary }} />
+            <span style={{ fontWeight: 600, fontSize: '14px' }}>
+              Code City Map
+            </span>
+          </div>
 
-            {(legendFileTypes.length > 0 || legendGitStatus.length > 0 || computedTreeStats) && (
-              <button
-                onClick={() => setShowLegend(!showLegend)}
+          {/* Color mode selector */}
+          <div
+            ref={colorModeDropdownRef}
+            style={{ position: 'relative' }}
+          >
+            <button
+              onClick={() => setShowColorModeDropdown(!showColorModeDropdown)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 10px',
+                fontSize: '12px',
+                color: theme.colors.text,
+                backgroundColor: theme.colors.background,
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: '4px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                minWidth: '120px',
+              }}
+              title="Change color mode"
+            >
+              <span style={{ flex: 1, textAlign: 'left' }}>
+                {currentColorModeConfig.name}
+              </span>
+              <ChevronDown
+                size={14}
                 style={{
-                  fontSize: '12px',
-                  color: showLegend
-                    ? theme.colors.primary
-                    : theme.colors.textSecondary,
-                  backgroundColor: showLegend
-                    ? theme.colors.primary + '22'
-                    : theme.colors.background,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  border: showLegend
-                    ? `1px solid ${theme.colors.primary}`
-                    : '1px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  marginLeft: 'auto',
+                  transform: showColorModeDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.15s ease',
                 }}
-                title={showLegend ? 'Hide legend' : 'Show legend'}
+              />
+            </button>
+
+            {/* Dropdown menu */}
+            {showColorModeDropdown && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: '4px',
+                  backgroundColor: theme.colors.background,
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: '4px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 100,
+                  overflow: 'hidden',
+                  minWidth: '160px',
+                }}
               >
-                <List size={12} />
-                Legend
-              </button>
+                {availableColorModes.map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => {
+                      setColorMode(mode.id);
+                      setShowColorModeDropdown(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      width: '100%',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: mode.id === colorMode ? theme.colors.primary : theme.colors.text,
+                      backgroundColor: mode.id === colorMode ? theme.colors.primary + '15' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (mode.id !== colorMode) {
+                        e.currentTarget.style.backgroundColor = theme.colors.backgroundLight;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (mode.id !== colorMode) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <span style={{ fontWeight: mode.id === colorMode ? 600 : 400 }}>
+                      {mode.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        color: theme.colors.textSecondary,
+                        marginTop: '2px',
+                      }}
+                    >
+                      {mode.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
+          </div>
+
+          {(legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendQualityMetrics.length > 0 || computedTreeStats) && (
+            <button
+              onClick={() => setShowLegend(!showLegend)}
+              style={{
+                fontSize: '12px',
+                color: showLegend
+                  ? theme.colors.primary
+                  : theme.colors.textSecondary,
+                backgroundColor: showLegend
+                  ? theme.colors.primary + '22'
+                  : theme.colors.background,
+                padding: '2px 8px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                border: showLegend
+                  ? `1px solid ${theme.colors.primary}`
+                  : '1px solid transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              title={showLegend ? 'Hide legend' : 'Show legend'}
+            >
+              <List size={12} />
+              Legend
+            </button>
+          )}
         </div>
       </div>
 
@@ -801,6 +1014,29 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
                     {hoverInfo.fileCount === 1 ? 'file' : 'files'}
                   </div>
                 )}
+
+                {/* Quality metric for files in quality color modes */}
+                {hoverInfo.hoveredBuilding && hoveredFileMetric && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      backgroundColor: theme.colors.backgroundLight,
+                      borderRadius: '4px',
+                      border: `1px solid ${theme.colors.border}`,
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      color: hoveredFileMetric.value === null
+                        ? theme.colors.textSecondary
+                        : theme.colors.text,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {hoveredFileMetric.label}
+                  </div>
+                )}
               </>
             ) : (
               /* Default help text when not hovering */
@@ -818,15 +1054,18 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         </div>
 
         {/* Legend panel - positioned based on layout */}
-        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendAgentLayers.length > 0 || computedTreeStats) && (
+        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendAgentLayers.length > 0 || legendQualityMetrics.length > 0 || computedTreeStats) && (
           <Legend
             fileTypes={legendFileTypes}
             gitStatus={legendGitStatus}
             agentLayers={legendAgentLayers}
+            qualityMetrics={legendQualityMetrics}
+            colorMode={colorMode}
             stats={computedTreeStats}
             onItemClick={toggleFileType}
             onGitStatusClick={toggleGitStatus}
             onAgentLayerClick={toggleAgentLayer}
+            onQualityMetricClick={toggleQualityMetric}
             onClearAgentLayers={clearAgentLayers}
             position={layout.legendPosition}
             maxSize={layout.legendMaxSize}
