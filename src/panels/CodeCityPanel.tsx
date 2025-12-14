@@ -187,9 +187,17 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     );
   }, [gitSlice?.data, qualitySlice?.data]);
 
-  // Auto-select a non-fileTypes mode when multiple modes are available
+  // Auto-select color mode based on available modes
   useEffect(() => {
-    if (availableColorModes.length > 1 && colorMode === 'fileTypes') {
+    const currentModeAvailable = availableColorModes.some(m => m.id === colorMode);
+
+    // If current mode is no longer available, reset to best available
+    if (!currentModeAvailable) {
+      const nonFileTypesMode = availableColorModes.find(m => m.id !== 'fileTypes');
+      setColorMode(nonFileTypesMode?.id || 'fileTypes');
+    }
+    // If we're on fileTypes but other modes are available, switch to first non-fileTypes
+    else if (availableColorModes.length > 1 && colorMode === 'fileTypes') {
       const nonFileTypesMode = availableColorModes.find(m => m.id !== 'fileTypes');
       if (nonFileTypesMode) {
         setColorMode(nonFileTypesMode.id);
