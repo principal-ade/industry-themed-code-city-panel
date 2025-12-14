@@ -1,5 +1,5 @@
 import React from 'react';
-import { File, Folder, Activity, X, BarChart3 } from 'lucide-react';
+import { Activity, X, BarChart3 } from 'lucide-react';
 import { useTheme } from '@principal-ade/industry-theme';
 import type { ColorMode } from '../utils/qualityLayers';
 
@@ -36,18 +36,12 @@ export interface LegendQualityMetric {
   enabled: boolean;
 }
 
-interface LegendStats {
-  fileCount: number;
-  directoryCount: number;
-}
-
 interface LegendProps {
   fileTypes: LegendFileType[];
   gitStatus?: LegendGitStatus[];
   agentLayers?: LegendAgentLayer[];
   qualityMetrics?: LegendQualityMetric[];
   colorMode?: ColorMode;
-  stats?: LegendStats | null;
   onItemClick?: (id: string) => void;
   onGitStatusClick?: (id: string) => void;
   onAgentLayerClick?: (id: string) => void;
@@ -68,7 +62,6 @@ export const Legend: React.FC<LegendProps> = ({
   agentLayers,
   qualityMetrics,
   colorMode,
-  stats,
   onItemClick,
   onGitStatusClick,
   onAgentLayerClick,
@@ -83,7 +76,7 @@ export const Legend: React.FC<LegendProps> = ({
   const hasAgentLayers = agentLayers && agentLayers.length > 0;
   const hasQualityMetrics = qualityMetrics && qualityMetrics.length > 0;
 
-  if (fileTypes.length === 0 && !stats && !hasGitStatus && !hasAgentLayers && !hasQualityMetrics) {
+  if (fileTypes.length === 0 && !hasGitStatus && !hasAgentLayers && !hasQualityMetrics) {
     return null;
   }
 
@@ -103,7 +96,7 @@ export const Legend: React.FC<LegendProps> = ({
     <div
       style={{
         display: 'flex',
-        flexDirection: 'column-reverse',
+        flexDirection: 'column',
         gap: '12px',
         padding: '12px 16px',
         backgroundColor: theme.colors.background,
@@ -125,11 +118,14 @@ export const Legend: React.FC<LegendProps> = ({
         flexShrink: 0,
       }}
     >
-      {/* File types section - rendered first in reverse order (appears at bottom) */}
-      {fileTypes.length > 0 && (
+      {/* Quality metrics section - shows coverage/linting/type safety metrics */}
+      {hasQualityMetrics && colorMode && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div
             style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
               fontSize: '11px',
               fontWeight: 600,
               color: theme.colors.textSecondary,
@@ -137,92 +133,11 @@ export const Legend: React.FC<LegendProps> = ({
               letterSpacing: '0.5px',
             }}
           >
-            File Types
+            <BarChart3 size={12} />
+            {qualityModeLabels[colorMode] || 'Quality Metrics'}
           </div>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px',
-            }}
-          >
-            {fileTypes.map((fileType) => (
-              <button
-                key={fileType.id}
-                onClick={() => onItemClick?.(fileType.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '6px 10px',
-                  backgroundColor: theme.colors.backgroundLight,
-                  border: `1px solid ${theme.colors.border}`,
-                  borderRadius: '4px',
-                  cursor: onItemClick ? 'pointer' : 'default',
-                  opacity: fileType.enabled ? 1 : 0.4,
-                  transition: 'all 0.15s ease',
-                  minWidth: '100px',
-                  flex: '1 1 100px',
-                  maxWidth: '200px',
-                  boxSizing: 'border-box',
-                }}
-              >
-                {/* Styled rectangle preview */}
-                <div
-                  style={{
-                    width: '18px',
-                    height: '14px',
-                    backgroundColor: fileType.fillColor,
-                    border: fileType.borderColor
-                      ? `2px solid ${fileType.borderColor}`
-                      : 'none',
-                    borderRadius: '2px',
-                    flexShrink: 0,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: '12px',
-                    color: theme.colors.text,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    flex: 1,
-                    minWidth: 0,
-                  }}
-                >
-                  {fileType.name}
-                </span>
-                <span
-                  style={{
-                    fontSize: '10px',
-                    color: theme.colors.textSecondary,
-                    flexShrink: 0,
-                  }}
-                >
-                  {fileType.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Git status section - rendered second in reverse order (appears in middle) */}
-      {hasGitStatus && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              color: theme.colors.textSecondary,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-            }}
-          >
-            Git Changes
-          </div>
+          {/* Quality metric items */}
           <div
             style={{
               display: 'flex',
@@ -230,10 +145,10 @@ export const Legend: React.FC<LegendProps> = ({
               gap: '8px',
             }}
           >
-            {gitStatus!.map((status) => (
+            {qualityMetrics!.map((metric) => (
               <button
-                key={status.id}
-                onClick={() => onGitStatusClick?.(status.id)}
+                key={metric.id}
+                onClick={() => onQualityMetricClick?.(metric.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -242,8 +157,8 @@ export const Legend: React.FC<LegendProps> = ({
                   backgroundColor: theme.colors.backgroundLight,
                   border: `1px solid ${theme.colors.border}`,
                   borderRadius: '4px',
-                  cursor: onGitStatusClick ? 'pointer' : 'default',
-                  opacity: status.enabled ? 1 : 0.4,
+                  cursor: onQualityMetricClick ? 'pointer' : 'default',
+                  opacity: metric.enabled ? 1 : 0.4,
                   transition: 'all 0.15s ease',
                   minWidth: '100px',
                   flex: '1 1 100px',
@@ -251,12 +166,12 @@ export const Legend: React.FC<LegendProps> = ({
                   boxSizing: 'border-box',
                 }}
               >
-                {/* Colored circle for git status */}
+                {/* Colored circle for metric category */}
                 <div
                   style={{
                     width: '12px',
                     height: '12px',
-                    backgroundColor: status.color,
+                    backgroundColor: metric.color,
                     borderRadius: '50%',
                     flexShrink: 0,
                     boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
@@ -264,7 +179,7 @@ export const Legend: React.FC<LegendProps> = ({
                 />
                 <span
                   style={{
-                    fontSize: '12px',
+                    fontSize: '11px',
                     color: theme.colors.text,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
@@ -273,7 +188,7 @@ export const Legend: React.FC<LegendProps> = ({
                     minWidth: 0,
                   }}
                 >
-                  {status.name}
+                  {metric.name}
                 </span>
                 <span
                   style={{
@@ -282,7 +197,7 @@ export const Legend: React.FC<LegendProps> = ({
                     flexShrink: 0,
                   }}
                 >
-                  {status.count}
+                  {metric.count} {metric.count === 1 ? 'file' : 'files'}
                 </span>
               </button>
             ))}
@@ -405,14 +320,11 @@ export const Legend: React.FC<LegendProps> = ({
         </div>
       )}
 
-      {/* Quality metrics section - shows coverage/linting/type safety metrics */}
-      {hasQualityMetrics && colorMode && (
+      {/* Git status section */}
+      {hasGitStatus && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
               fontSize: '11px',
               fontWeight: 600,
               color: theme.colors.textSecondary,
@@ -420,11 +332,8 @@ export const Legend: React.FC<LegendProps> = ({
               letterSpacing: '0.5px',
             }}
           >
-            <BarChart3 size={12} />
-            {qualityModeLabels[colorMode] || 'Quality Metrics'}
+            Git Changes
           </div>
-
-          {/* Quality metric items - now with clear labels like "0 issues", "80-100%" */}
           <div
             style={{
               display: 'flex',
@@ -432,10 +341,10 @@ export const Legend: React.FC<LegendProps> = ({
               gap: '8px',
             }}
           >
-            {qualityMetrics!.map((metric) => (
+            {gitStatus!.map((status) => (
               <button
-                key={metric.id}
-                onClick={() => onQualityMetricClick?.(metric.id)}
+                key={status.id}
+                onClick={() => onGitStatusClick?.(status.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -444,8 +353,8 @@ export const Legend: React.FC<LegendProps> = ({
                   backgroundColor: theme.colors.backgroundLight,
                   border: `1px solid ${theme.colors.border}`,
                   borderRadius: '4px',
-                  cursor: onQualityMetricClick ? 'pointer' : 'default',
-                  opacity: metric.enabled ? 1 : 0.4,
+                  cursor: onGitStatusClick ? 'pointer' : 'default',
+                  opacity: status.enabled ? 1 : 0.4,
                   transition: 'all 0.15s ease',
                   minWidth: '100px',
                   flex: '1 1 100px',
@@ -453,12 +362,12 @@ export const Legend: React.FC<LegendProps> = ({
                   boxSizing: 'border-box',
                 }}
               >
-                {/* Colored circle for metric category */}
+                {/* Colored circle for git status */}
                 <div
                   style={{
                     width: '12px',
                     height: '12px',
-                    backgroundColor: metric.color,
+                    backgroundColor: status.color,
                     borderRadius: '50%',
                     flexShrink: 0,
                     boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
@@ -466,7 +375,7 @@ export const Legend: React.FC<LegendProps> = ({
                 />
                 <span
                   style={{
-                    fontSize: '11px',
+                    fontSize: '12px',
                     color: theme.colors.text,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
@@ -475,7 +384,7 @@ export const Legend: React.FC<LegendProps> = ({
                     minWidth: 0,
                   }}
                 >
-                  {metric.name}
+                  {status.name}
                 </span>
                 <span
                   style={{
@@ -484,7 +393,7 @@ export const Legend: React.FC<LegendProps> = ({
                     flexShrink: 0,
                   }}
                 >
-                  {metric.count} {metric.count === 1 ? 'file' : 'files'}
+                  {status.count}
                 </span>
               </button>
             ))}
@@ -492,25 +401,87 @@ export const Legend: React.FC<LegendProps> = ({
         </div>
       )}
 
-      {/* Stats row - rendered last in reverse order (appears at top) */}
-      {stats && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px',
-            fontSize: '12px',
-            color: theme.colors.textSecondary,
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <File size={12} />
-            {stats.fileCount.toLocaleString()} files
-          </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Folder size={12} />
-            {stats.directoryCount.toLocaleString()} folders
-          </span>
+      {/* File types section */}
+      {fileTypes.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div
+            style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: theme.colors.textSecondary,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}
+          >
+            File Types
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {fileTypes.map((fileType) => (
+              <button
+                key={fileType.id}
+                onClick={() => onItemClick?.(fileType.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 10px',
+                  backgroundColor: theme.colors.backgroundLight,
+                  border: `1px solid ${theme.colors.border}`,
+                  borderRadius: '4px',
+                  cursor: onItemClick ? 'pointer' : 'default',
+                  opacity: fileType.enabled ? 1 : 0.4,
+                  transition: 'all 0.15s ease',
+                  minWidth: '100px',
+                  flex: '1 1 100px',
+                  maxWidth: '200px',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {/* Styled rectangle preview */}
+                <div
+                  style={{
+                    width: '18px',
+                    height: '14px',
+                    backgroundColor: fileType.fillColor,
+                    border: fileType.borderColor
+                      ? `2px solid ${fileType.borderColor}`
+                      : 'none',
+                    borderRadius: '2px',
+                    flexShrink: 0,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '12px',
+                    color: theme.colors.text,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {fileType.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    color: theme.colors.textSecondary,
+                    flexShrink: 0,
+                  }}
+                >
+                  {fileType.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

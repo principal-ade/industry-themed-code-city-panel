@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
-  MapIcon,
+  File,
+  Folder,
   Building2,
   List,
   ChevronDown,
@@ -185,6 +186,16 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       isColorModeAvailable(mode.id, qualitySlice?.data, !!hasGitData)
     );
   }, [gitSlice?.data, qualitySlice?.data]);
+
+  // Auto-select a non-fileTypes mode when multiple modes are available
+  useEffect(() => {
+    if (availableColorModes.length > 1 && colorMode === 'fileTypes') {
+      const nonFileTypesMode = availableColorModes.find(m => m.id !== 'fileTypes');
+      if (nonFileTypesMode) {
+        setColorMode(nonFileTypesMode.id);
+      }
+    }
+  }, [availableColorModes, colorMode]);
 
   // Get current color mode config
   const currentColorModeConfig = useMemo(() => {
@@ -711,32 +722,37 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       <div
         style={{
           display: 'flex',
-          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          height: '40px',
           borderBottom: `1px solid ${theme.colors.border}`,
           backgroundColor: theme.colors.backgroundLight,
+          flexShrink: 0,
+          gap: '12px',
         }}
       >
-        {/* First row: Title and actions */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '4px 16px',
-            height: '40px',
-            borderBottom: `1px solid ${theme.colors.border}`,
-            flexShrink: 0,
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <MapIcon size={16} style={{ color: theme.colors.primary }} />
-            <span style={{ fontWeight: 600, fontSize: '14px' }}>
-              File City Map
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {computedTreeStats && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <File size={14} style={{ color: theme.colors.textSecondary }} />
+                  <span style={{ fontSize: '13px', color: theme.colors.text }}>
+                    {computedTreeStats.fileCount.toLocaleString()} files
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Folder size={14} style={{ color: theme.colors.textSecondary }} />
+                  <span style={{ fontSize: '13px', color: theme.colors.text }}>
+                    {computedTreeStats.directoryCount.toLocaleString()} folders
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Color mode selector */}
+          {/* Color mode selector - only show if there are multiple modes */}
+          {availableColorModes.length > 1 && (
           <div
             ref={colorModeDropdownRef}
             style={{ position: 'relative' }}
@@ -838,8 +854,9 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
               </div>
             )}
           </div>
+          )}
 
-          {(legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendQualityMetrics.length > 0 || computedTreeStats) && (
+          {(legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendQualityMetrics.length > 0) && (
             <button
               onClick={() => setShowLegend(!showLegend)}
               style={{
@@ -867,7 +884,6 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
               Legend
             </button>
           )}
-        </div>
       </div>
 
       {/* Main content area with map and legend */}
@@ -918,7 +934,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
                   gap: '12px',
                 }}
               >
-                <MapIcon size={32} style={{ opacity: 0.5 }} />
+                <Building2 size={32} style={{ opacity: 0.5 }} />
                 <div>
                   {context.currentScope.repository
                     ? 'Building code city visualization...'
@@ -1055,14 +1071,13 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         </div>
 
         {/* Legend panel - positioned based on layout */}
-        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendAgentLayers.length > 0 || legendQualityMetrics.length > 0 || computedTreeStats) && (
+        {showLegend && (legendFileTypes.length > 0 || legendGitStatus.length > 0 || legendAgentLayers.length > 0 || legendQualityMetrics.length > 0) && (
           <Legend
             fileTypes={legendFileTypes}
             gitStatus={legendGitStatus}
             agentLayers={legendAgentLayers}
             qualityMetrics={legendQualityMetrics}
             colorMode={colorMode}
-            stats={computedTreeStats}
             onItemClick={toggleFileType}
             onGitStatusClick={toggleGitStatus}
             onAgentLayerClick={toggleAgentLayer}
