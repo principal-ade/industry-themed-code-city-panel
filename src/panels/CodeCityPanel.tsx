@@ -723,6 +723,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '4px 16px',
+            height: '40px',
             borderBottom: `1px solid ${theme.colors.border}`,
             flexShrink: 0,
             gap: '12px',
