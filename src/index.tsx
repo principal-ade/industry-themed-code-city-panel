@@ -10,7 +10,7 @@ export const panels: PanelDefinition[] = [
   {
     metadata: {
       id: 'principal-ade.code-city-panel',
-      name: 'Code City Map',
+      name: 'File City Map',
       icon: '🏙️',
       version: '0.1.0',
       author: 'Principal AI',

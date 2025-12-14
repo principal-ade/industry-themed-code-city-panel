@@ -732,7 +732,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <MapIcon size={16} style={{ color: theme.colors.primary }} />
             <span style={{ fontWeight: 600, fontSize: '14px' }}>
-              Code City Map
+              File City Map
             </span>
           </div>
 
