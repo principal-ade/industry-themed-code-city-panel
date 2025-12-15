@@ -34,3 +34,13 @@ export type {
   PanelLoader,
   PanelRegistryConfig,
 } from '@principal-ade/panel-framework-core';
+
+// Export Code City specific types
+export type {
+  CodeCityColorModesSliceData,
+  QualitySliceData,
+  ColorMode,
+  ColorModeConfig,
+  FileMetricData,
+  HighlightLayer,
+} from '../panels/utils/qualityLayers';

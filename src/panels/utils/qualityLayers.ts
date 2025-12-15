@@ -85,6 +85,38 @@ export const COLOR_MODES: ColorModeConfig[] = [
 ];
 
 /**
+ * Default color modes (always available without quality data)
+ */
+export const DEFAULT_COLOR_MODES: ColorModeConfig[] = [
+  { id: 'fileTypes', name: 'File Types', description: 'Color by file extension' },
+  { id: 'git', name: 'Git Status', description: 'Color by git changes' },
+];
+
+/**
+ * Quality-based color modes (require quality data)
+ */
+export const QUALITY_COLOR_MODES: ColorModeConfig[] = [
+  { id: 'coverage', name: 'Test Coverage', description: 'Color by test coverage %' },
+  { id: 'eslint', name: 'Linting', description: 'Color by ESLint issues' },
+  { id: 'typescript', name: 'Type Safety', description: 'Color by TypeScript errors' },
+  { id: 'prettier', name: 'Formatting', description: 'Color by Prettier issues' },
+  { id: 'knip', name: 'Dead Code', description: 'Color by unused exports' },
+  { id: 'alexandria', name: 'Documentation', description: 'Color by doc coverage' },
+];
+
+/**
+ * Code City color modes slice data structure.
+ * Hosts populate this slice to control which color modes are available.
+ * If not populated, only default modes (fileTypes, git) are available.
+ */
+export interface CodeCityColorModesSliceData {
+  /** Additional color modes to enable (beyond fileTypes and git) */
+  enabledModes?: ColorMode[];
+  /** Quality data for quality-based color modes */
+  qualityData?: QualitySliceData;
+}
+
+/**
  * Convert a score (0-100) to a color on the red-yellow-green gradient
  * Higher scores = greener (better)
  */

@@ -25,7 +25,9 @@ import type { PanelComponentProps } from '../types';
 import {
   type ColorMode,
   type QualitySliceData,
+  type CodeCityColorModesSliceData,
   COLOR_MODES,
+  DEFAULT_COLOR_MODES,
   isColorModeAvailable,
   getLayersForColorMode,
   SCORE_THRESHOLDS,
@@ -133,8 +135,13 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   // Get agent highlight layers slice for showing agent activity
   const agentHighlightLayersSlice = context.getSlice<HighlightLayer[]>('agentHighlightLayers');
 
-  // Get quality slice for coverage and metrics visualization
-  const qualitySlice = context.getSlice<QualitySliceData>('quality');
+  // Get code city color modes slice for controlling available color modes
+  // Hosts populate this to enable quality-based color modes
+  // If not populated, only fileTypes and git modes are available
+  const colorModesSlice = context.getSlice<CodeCityColorModesSliceData>('codeCityColorModes');
+
+  // Extract quality data from the color modes slice (not from quality slice directly)
+  const qualityData = colorModesSlice?.data?.qualityData;
 
   // Track whether file color layers are currently registered
   const fileColorLayersRegistered = useRef(false);
@@ -174,6 +181,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   }, [showColorModeDropdown]);
 
   // Compute available color modes based on data
+  // Only show quality modes if the host has explicitly enabled them via colorModesSlice
   const availableColorModes = useMemo(() => {
     const hasGitData = gitSlice?.data && (
       gitSlice.data.staged.length > 0 ||
@@ -182,10 +190,20 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       gitSlice.data.deleted.length > 0
     );
 
-    return COLOR_MODES.filter(mode =>
-      isColorModeAvailable(mode.id, qualitySlice?.data, !!hasGitData)
-    );
-  }, [gitSlice?.data, qualitySlice?.data]);
+    // Get explicitly enabled modes from the slice, or default to just fileTypes + git
+    const enabledModes = colorModesSlice?.data?.enabledModes;
+
+    // Filter to modes that are both enabled and have data available
+    return COLOR_MODES.filter(mode => {
+      // fileTypes is always available
+      if (mode.id === 'fileTypes') return true;
+      // git is available if there's git data
+      if (mode.id === 'git') return hasGitData;
+      // Quality modes are only available if explicitly enabled AND have data
+      if (!enabledModes?.includes(mode.id)) return false;
+      return isColorModeAvailable(mode.id, qualityData, !!hasGitData);
+    });
+  }, [gitSlice?.data, colorModesSlice?.data?.enabledModes, qualityData]);
 
   // Auto-select color mode based on available modes
   useEffect(() => {
@@ -214,7 +232,6 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   const hoveredFileMetric = useMemo(() => {
     if (!hoverInfo?.hoveredBuilding?.path) return null;
     const filePath = hoverInfo.hoveredBuilding.path;
-    const qualityData = qualitySlice?.data;
 
     if (!qualityData) return null;
 
@@ -271,7 +288,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
       default:
         return null;
     }
-  }, [hoverInfo?.hoveredBuilding?.path, colorMode, qualitySlice?.data]);
+  }, [hoverInfo?.hoveredBuilding?.path, colorMode, qualityData]);
 
   // Compute tree stats from cityData
   const computedTreeStats = useMemo(() => {
@@ -427,11 +444,11 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
     return getLayersForColorMode(
       colorMode,
       cityData.buildings,
-      qualitySlice?.data,
+      qualityData,
       [], // Not needed for quality modes
       []  // Not needed for quality modes
     );
-  }, [cityData, colorMode, qualitySlice?.data]);
+  }, [cityData, colorMode, qualityData]);
 
   // Compute whether git/agent layers exist
   const hasGitOrAgentLayers = useMemo(() => {
@@ -612,18 +629,28 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
   // Update highlight layers based on color mode
   // This effect manages which layers are shown based on the selected color mode
   useEffect(() => {
-    // Get agent layers (they're always shown on top when present)
+    // Get agent layers
     const agentLayers = agentHighlightLayersSlice?.data || [];
     const formattedAgentLayers: HighlightLayer[] = agentLayers.map((layer, idx) => ({
       id: layer.id || `event-highlight-${idx}`,
       name: layer.name,
       enabled: layer.enabled,
       color: layer.color,
-      priority: layer.priority || 150, // High priority so they're on top
+      priority: layer.priority || 150,
       items: layer.items,
     }));
 
-    // Get layers for the selected color mode
+    // If agent layers are present, show ONLY agent layers (like git mode)
+    // This prevents file type colors from obscuring agent activity
+    if (formattedAgentLayers.length > 0) {
+      setHighlightLayers(formattedAgentLayers);
+      fileColorLayersRegistered.current = false;
+      gitLayersRegistered.current = false;
+      agentLayersRegistered.current = true;
+      return;
+    }
+
+    // No agent layers - show the selected color mode
     let modeLayers: HighlightLayer[] = [];
 
     switch (colorMode) {
@@ -650,14 +677,12 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
         break;
     }
 
-    // Combine mode layers with agent layers (agent layers on top)
-    const allLayers = [...modeLayers, ...formattedAgentLayers];
-    setHighlightLayers(allLayers);
+    setHighlightLayers(modeLayers);
 
     // Update tracking refs
     fileColorLayersRegistered.current = colorMode === 'fileTypes';
     gitLayersRegistered.current = colorMode === 'git';
-    agentLayersRegistered.current = formattedAgentLayers.length > 0;
+    agentLayersRegistered.current = false;
   }, [colorMode, fileColorLayers, gitStatusLayers, qualityLayers, agentHighlightLayersSlice?.data]);
 
   // Load city data from file tree

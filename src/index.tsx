@@ -16,7 +16,11 @@ export const panels: PanelDefinition[] = [
       author: 'Principal AI',
       description:
         '3D visualization of repository structure using the Code City metaphor',
-      slices: ['fileTree'], // Data slices this panel depends on
+      // Data slices this panel depends on
+      // - fileTree: Required - repository file structure
+      // - codeCityColorModes: Optional - controls which color modes are available
+      //   (if not provided, only fileTypes and git modes are shown)
+      slices: ['fileTree', 'codeCityColorModes'],
       // UTCP-compatible tools this panel exposes
       tools: codeCityPanelTools,
     },
@@ -73,3 +77,24 @@ export {
   selectDistrictTool,
   resetViewTool,
 } from './tools';
+
+/**
+ * Export types for host applications to create the codeCityColorModes slice.
+ */
+export type {
+  CodeCityColorModesSliceData,
+  QualitySliceData,
+  ColorMode,
+  ColorModeConfig,
+  FileMetricData,
+  HighlightLayer,
+} from './types';
+
+/**
+ * Export color mode constants for host applications.
+ */
+export {
+  COLOR_MODES,
+  DEFAULT_COLOR_MODES,
+  QUALITY_COLOR_MODES,
+} from './panels/utils/qualityLayers';
