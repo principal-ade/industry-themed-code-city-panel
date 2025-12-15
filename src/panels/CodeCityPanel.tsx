@@ -945,7 +945,7 @@ const CodeCityPanelContent: React.FC<PanelComponentProps> = ({
                 <Building2 size={32} style={{ opacity: 0.5 }} />
                 <div>
                   {context.currentScope.repository
-                    ? 'Building code city visualization...'
+                    ? 'Building File City...'
                     : 'No repository loaded'}
                 </div>
               </div>
